@@ -73,139 +73,201 @@ cmlfr.add_argument("--output", "-o", dest="output_file", required=True, help="Th
 
 args = cmlfr.parse_args()
 
-class SiteModelsResults ():
+class GeneFolders:
+    """Contains the data and structure for each gene folder, which will be used to populate the .csv output file."""
+
+    def __init__(self):
+        
+        self.folder_name = None                          ### The name for the gene folder
+        self.gene_length = None                          ### The length of the gene
+        self.omega = None                                ### The omega (dN/dS) estimated by CodeML's null run for the gene
+        self.m0_lnl = None                               ### The log likelihood value for the M0 model
+        self.m1a_lnl = None                              ### The log likelihood value for the M1a model
+        self.df0v1a = 1                                  ### The degrees of freedom for the comparison between the M0 and M1a models
+        self.lrt0v1a = None                              ### The LRT from the comparison between the M0 and M1a models
+        self.pvalue0v1a = None                           ### The pvalue calculated by a Chi Squared test with the LRT value from the comparison between the M0 and M1a models
+        self.m2a_lnl = None                              ### The log likelihood value for the M2a model
+        self.df1av2a = 2                                 ### The degrees of freedom for the comparison between the M1a and M2a models
+        self.lrt1av2a = None                             ### The LRT from the comparison between the M1a and M2a models
+        self.pvalue1av2a = None                          ### The pvalue calculated by a Chi Squared test with the LRT value from the comparison between the M1a and M2a models
+        self.NumberSites1av2a = None                     ### The total number of sites under positive selection identified by M1a vs M2a
+        self.Sites1av2a = None                           ### The list containing the sites under positive selection identified by M1a vs M2a
+        self.PPSites1av2a = None                         ### The list of posterior probabilities for the sites under positive selection identified by M1a vs M2a
+        self.m7_lnl = None                               ### The log likelihood value for the M7 model
+        self.m8_lnl = None                               ### The log likelihood value for the M8 model
+        self.df7v8 = 2                                   ### The degrees of freedom for the comparison between the M7 and M8 models
+        self.lrt7v8 = None                               ### The LRT from the comparison between the M7 and M8 models
+        self.pvalue7v8 = None                            ### The pvalue calculated by a Chi Squared test with the LRT value from the comparison between the M7 and M8 models
+        self.NumberSites7v8 = None                       ### The total number of sites under positive selection identified by M7 vs M8
+        self.Sites7v8 = None                             ### The list containing the sites under positive selection identified by M7 vs M8
+        self.PPSites7v8 = None                           ### The list of posterior probabilities for the sites under positive selection identified by M7 vs M8
+
+class SiteModelsResults:
     """Contains the output values for both Null and Alternative runs (and their comparisons) for the user-specified genes present in
     a given main directory. If the LRT is significant, further information for each gene will be available in the ouput."""
 
-    def extract_null_values(main_directory):
+    def __init__(self, main_directory, output_csv):
+        self.dict = OrderedDict()
+        self.main_directory = main_directory
+        self.output_csv = output_csv
+
+    def extract_null_values(self):
         """Extract all the values and information needed from the output files of CodeML's null run."""
     
-    ### This will list all the folders that start with "gene_", which is the adopted structure and naming
-    gene_folders = [dir for dir in os.listdir() if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
+        ### This will list all the folders that start with "gene_", which is the adopted structure and naming
+        gene_folders = [dir for dir in os.listdir(self.main_directory) if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
     
-    for folder in gene_folders:
-        ### This will establish the path to the Null folder inside each gene folder
-        output_path = os.path.join(os.getcwd(), folder, "Null")
-        for file in os.listdir(output_path):
-            ### Get the path to the first (and only) .mlc file in the Null folder
-            if file.endswith(".mlc"):
-                output_file_path = os.path.join(output_path, output_file_path)
-                print("Null: Found .mlc file in", folder)
-                break
-            else:
-                print("Error: No .mlc file found in", output_path)
-                sys.exit(1) ### Abort the script if a .mlc file is missing     
-        
-        ### Now, to open the file and start parsing the information
-        output_file = open(output_file_path, 'r')
-        
-        for line in output_file:
-            ### Check if the first line is empty, if not it contains the number of seqs/individuals followed by the gene length 
-            if line.strip().startswith("Before deleting alignment gaps"):
-                ### Extract gene length from the next line after the term
-                gene_length = next(output_file).strip().split()[1]
+        for folder in gene_folders:
+            values = GeneFolders()
+            values.folder_name = folder.split("gene_")[1]
+            ### This will establish the path to the Null folder inside each gene folder
+            output_path = os.path.join(os.getcwd(), folder, "Null")
+            for file in os.listdir(output_path):
+                ### Get the path to the first (and only) .mlc file in the Null folder
+                if file.endswith(".mlc"):
+                    output_file_path = os.path.join(output_path, file)
+                    print("Null: Found .mlc file in", folder)
+                    break
+                else:
+                    print("Error: No .mlc file found in", output_path)
+                    sys.exit(1) ### Abort the script if a .mlc file is missing     
+            
+            ### Now, to open the file and start parsing the information
+            output_file = open(output_file_path, "r")
+            
+            for line in output_file:
+                ### Check if the first line is empty, if not it contains the number of seqs/individuals followed by the gene length 
+                if line.strip().startswith("After deleting gaps."):
+                    ### Extract gene length from the next line after the term
+                    gene_length = next(output_file).strip().split()[1]
+                    values.gene_length = gene_length
+
+                ### If none of the previous terms are present in the file...
+                elif line.strip():
+                    ### Extract gene length from the first line
+                    gene_length = int(line.split()[1])
+                    values.gene_length = gene_length
+            
+                else:
+                    print("Error: Gene length not found in", output_file_path)
+                    sys.exit(1) ### Abort the script if there is a .mlc file without the gene length
+                    
+                if line.strip().startswith("lnL"):
+                    m0_lnL = float(line.split(":")[-1].split()[0])
+                    values.m0_lnl = m0_lnL
+                else:
+                    print("Error: Null lnL not found in", output_file_path)
+                    sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
                 
-            elif line.strip().startswith("After deleting gaps."):
-                ### Extract gene length from the next line after the term
-                gene_length = next(output_file).strip().split()[1]
-            
-            ### If none of the previous terms are present in the file...
-            elif line.strip():
-                ### Extract gene length from the first line
-                gene_length = int(line.split()[1])
+                if line.strip().startswith("omega (dN/dS)"):
+                    omega = float(line.split("=")[1].strip())
+                    values.omega = omega
+                else:
+                    print("Error: Omega not found in", output_file_path)
+                    sys.exit(1) ### Abort the script if there is a .mlc file without omega (dN/dS)
+                                    
+            output_file.close()
+
+            self.dict[values.folder_name] = values      
     
-            else:
-                print("Error: Gene length not found in", output_file_path)
-                sys.exit(1) ### Abort the script if there is a .mlc file without the gene length
-            
-            if line.strip().startswith("lnL"):
-                m0_lnL = float(line.split(":")[-1].split()[0])
-            else:
-                print("Error: Null lnL not found in", output_file_path)
-                sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
-        
-            if line.strip().startswith("omega (dN/dS)"):
-                omega = float(line.split("=")[1].strip())
-            else:
-                print("Error: Omega not found in", output_file_path)
-                sys.exit(1) ### Abort the script if there is a .mlc file without omega (dN/dS)
-                            
-        output_file.close()
-        
-    
-    def extract_alternative_values(main_directory):
+    def extract_alternative_values(self):
         """Extract all the values and information needed from the output files of CodeML's alternative run."""
     
-    ### This will list all the folders that start with "gene_", which is the adopted structure and naming
-    gene_folders = [dir for dir in os.listdir() if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
-    
-    for folder in gene_folders:
-        ### This will establish the path to the Alternative folder inside each gene folder
-        output_path = os.path.join(os.getcwd(), folder, "Alternative")
-        for file in os.listdir(output_path):
-            ### Get the path to the first (and only) .mlc file in the Alternative folder
-            if file.endswith(".mlc"):
-                output_file_path = os.path.join(output_path, output_file_path)
-                print("Alternative: Found .mlc file in", folder)
-                break
-            else:
-                print("Error: No .mlc file found in", output_path)
-                sys.exit(1) ### Abort the script if a .mlc file is missing     
+        ### This will list all the folders that start with "gene_", which is the adopted structure and naming
+        gene_folders = [dir for dir in os.listdir(self.main_directory) if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
+        
+        for folder in gene_folders:
+            values = self.dict[folder.split("gene_")[1]]
+            ### This will establish the path to the Alternative folder inside each gene folder
+            output_path = os.path.join(os.getcwd(), folder, "Alternative")
+            for file in os.listdir(output_path):
+                ### Get the path to the first (and only) .mlc file in the Alternative folder
+                if file.endswith(".mlc"):
+                    output_file_path = os.path.join(output_path, output_file_path)
+                    print("Alternative: Found .mlc file in", folder)
+                    break
+                else:
+                    print("Error: No .mlc file found in", output_path)
+                    sys.exit(1) ### Abort the script if a .mlc file is missing     
 
-        ### Now, to open the file and start parsing the information
-        output_file = open(output_file_path, 'r')
-        
-        for line in output_file:
-            ### Check if the first line is empty, if not it contains the number of seqs/individuals followed by the gene length 
-            if line.strip().startswith("Before deleting alignment gaps"):
-                ### Extract gene length from the next line after the term
-                gene_length = next(output_file).strip().split()[1]
+            ### Now, to open the file and start parsing the information
+            output_file = open(output_file_path, 'r')
                 
-            elif line.strip().startswith("After deleting gaps."):
-                ### Extract gene length from the next line after the term
-                gene_length = next(output_file).strip().split()[1]
-            
-            ### If none of the previous terms are present in the file...
-            elif line.strip():
-                ### Extract gene length from the first line
-                gene_length = int(line.split()[1])
-    
-            else:
-                print("Error: Gene length not found in", output_file_path)
-                sys.exit(1) ### Abort the script if there is a .mlc file without the gene length
-            
-            ### Counter to find the correct lnL values
-            lnl_counter = 0
-            
-            if line.strip().startswith("lnL"):
-                ### First lnL is for the null model
-                lnl_counter += 1
-                
-                if lnl_counter == 2: 
-                    ### Second occurrence is for the M1a model
-                    m1a_lnl = float(line.split(":")[-1].split()[0])
-                
-                if lnl_counter == 3:
-                    ### Third occurrence is for the M2a model
-                    m2a_lnl = float(line.split(":")[-1].split()[0])
+            for line in output_file:
+                ### Counter to find the correct lnL values
+                lnl_counter = 0
                     
-                    if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
+                if line.strip().startswith("lnL"):
+                    ### First lnL is for the null model
+                    lnl_counter += 1
                         
+                    if lnl_counter == 2: 
+                        ### Second occurrence is for the M1a model
+                        m1a_lnl = float(line.split(":")[-1].split()[0])
+                        values.m1a_lnl = m1a_lnl
+                        
+                    if lnl_counter == 3:
+                        ### Third occurrence is for the M2a model
+                        m2a_lnl = float(line.split(":")[-1].split()[0])
+                        values.m2a_lnl = m2a_lnl
+
+                        ### Initialise count variable to store site count, sites variable to store site list and pp variable to store posterior probability list
+                        count = 0
+                        sites = []
+                        pp = []
+
+                        if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
+                            next(output_file)
+                            extract = True
+                            continue
+                        elif line.strip().startswith("The grid"):
+                            break
+                        if extract:
+                            index = line.split()
+                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
+                                count += 1
+                                values.NumberSites1av2a = count
+                                values.Sites1av2a = sites.append(index[0])
+                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
+                                   
+                    if lnl_counter == 4:
+                        ### Fourth occurrence is for the M7 model
+                        m7_lnl = float(line.split(":")[-1].split()[0])
+                        values.m7_lnl = m7_lnl
+                        
+                    if lnl_counter == 5:
+                        ### Fifth occurrence is for the M8 model
+                        m8_lnl = float(line.split(":")[-1].split()[0])
+                        values.m8_lnl = m8_lnl
+
+                       ### Initialise count variable to store site count, sites variable to store site list and pp variable to store posterior probability list
+                        count = 0
+                        sites = []
+                        pp = []
+
+                        if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
+                            next(output_file)
+                            extract = True
+                            continue
+                        elif line.strip().startswith("The grid"):
+                            break
+                        if extract:
+                            index = line.split()
+                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
+                                count += 1
+                                values.NumberSites7v8 = count
+                                values.Sites7v8 = sites.append(index[0])
+                                values.PPSites7v8 = pp.append(float(index[2].replace("*", "")))
                 
-                if lnl_counter == 4:
-                    ### Fourth occurrence is for the M7 model
-                    m7_lnl = float(line.split(":")[-1].split()[0])
+                else:
+                    print("Error: Null lnL not found in", output_file_path)
+                    sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
                 
-                if lnl_counter == 5:
-                    ### Fifth occurrence is for the M8 model
-                    m8_lnl = float(line.split(":")[-1].split()[0]) 
-            else:
-                print("Error: Null lnL not found in", output_file_path)
-                sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
-        
-        output_file.close()                
-                    
-    def likelihood_ratio_test(df, null_lnl, alt_lnl):
+            output_file.close()                
+
+            self.dict[values.folder_name] = values
+
+    def likelihood_ratio_test(self, df, null_lnl, alt_lnl):
         """Perform a likelihood ratio test (LRT) with the lnL values for the Null and Alternative models, and then calculate the p-value using a Chi-squared test."""
         
         ### Need both lnL values to be able to perform a LRT
@@ -222,12 +284,78 @@ class SiteModelsResults ():
                 pvalue = float(1 - chi2(df).cdf(lrt))        
         
         return lrt, pvalue
+    
+    def df1_lrt(self):
+        ### Comparison between M0 and M1a
+        for gene in self.dict.values():
+                gene.lrt0v1a, gene.pvalue0v1a = self.likelihood_ratio_test(gene.df0v1a, gene.m0_lnl , gene.m1a_lnl)   ### df = 1 
+
+    def df2_lrt(self):
+        ### Comparison between M1a and M2a
+        for gene in self.dict.values():
+            gene.lrt1av2a, gene.pvalue1av2a = self.likelihood_ratio_test(gene.df1av2a, gene.m1a_lnl, gene.m2a_lnl)   ### df = 2
+        ### Comparison between M7 and M8
+        for gene in self.dict.values():
+            gene.lrt7v8, gene.pvalue7v8 = self.likelihood_ratio_test(gene.df7v8, gene.m7_lnl, gene.m8_lnl)   ### df = 2
                 
+
+    def write_output_csv(self):
+        """Write the contents of the ordered dictionary to an output .csv file."""            
+
+        save_to_output = open(self.output_csv, "w")
+        ### write header to output .csv
+        save_to_output.write("Gene;Length (bp);Omega (dN/dS);M0 lnL;M1a lnL;df;LRT (0 vs 1a);pvalue;M1a lnL;M2a lnL;df;LRT (1a vs 2a);pvalue;Number of Sites under PS;" 
+                            "Sites;PP;M7 lnL;M8 lnL;df;LRT (7 vs 8);pvalue;Number of Sites under PS;Sites;PP\n")
         
-if __name__ == "__main__":
-    def main():
+        for gene in self.dict.values():
+            print("Processing results for {}...".format(gene))
+
+            save_to_output.write("{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n".format(
+                                                gene.folder_name,                      
+                                                gene.gene_length,                      
+                                                gene.omega,                                  
+                                                gene.m0_lnl,                                
+                                                gene.m1a_lnl,                              
+                                                gene.df0v1a,                                
+                                                gene.lrt0v1a,                              
+                                                gene.pvalue0v1a,                        
+                                                gene.m2a_lnl,                              
+                                                gene.df1av2a,                              
+                                                gene.lrt1av2a,                            
+                                                gene.pvalue1av2a,                      
+                                                gene.NumberSites1av2a,            
+                                                gene.Sites1av2a,                        
+                                                gene.PPSites1av2a,                    
+                                                gene.m7_lnl,                                
+                                                gene.m8_lnl,                                
+                                                gene.df7v8,                                  
+                                                gene.lrt7v8,                                
+                                                gene.pvalue7v8,                          
+                                                gene.NumberSites7v8,                
+                                                gene.Sites7v8,                            
+                                                gene.PPSites7v8))
+
+        save_to_output.close()
+
+def main():
         ### Matching arguments with their intended variables
         main_directory = args.input_gene_list
         output_csv = args.output_file
-            
-        
+
+        sitemodels = SiteModelsResults(main_directory, output_csv)
+
+        ### Start running the functions
+        sitemodels.extract_null_values()
+        sitemodels.extract_alternative_values()
+        sitemodels.df1_lrt()
+        sitemodels.df2_lrt()
+
+        ### Save everything to the output file
+        sitemodels.write_output_csv()
+
+        ### Finished
+        print("The script has finished parsing the results.")
+
+if __name__ == "__main__":
+
+    main()    
