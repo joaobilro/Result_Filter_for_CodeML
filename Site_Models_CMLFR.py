@@ -145,24 +145,20 @@ class SiteModelsResults:
                             ### Extract gene length from the first line
                             split = line.split(" ")
                             gene_length = split[-1].split("\n")[0]
-                            print(gene_length)
                             values.gene_length = gene_length
                         
                         ### If gaps/ambiguous sites are not preserved...
                         if line.strip().startswith("After deleting gaps."):
                             ### Extract gene length from the next line after the term
                             gene_length = next(output_file).strip().split()[1]
-                            print(gene_length)
                             values.gene_length = gene_length
                             
                         if line.strip().startswith("lnL"):
                             m0_lnL = float(line.split(":")[-1].split()[0])
-                            print(m0_lnL)
                             values.m0_lnl = m0_lnL
                         
                         if line.strip().startswith("omega (dN/dS)"):
                             omega = float(line.split("=")[1].strip())
-                            print(omega)
                             values.omega = omega
 
                     output_file.close()
@@ -200,18 +196,66 @@ class SiteModelsResults:
                     ### Now, to open the file and start parsing the information
                     output_file = open(output_file_path, 'r')
                         
+                    lnl_counter = 0
+                    beb_counter = 0
+                    grid_counter = 0
+
                     for line in output_file:
-                       ### Get the first lnL, for M1a
-                       if line.startswith("NSsites Model 1: NearlyNeutral"):
+                       if line.strip().startswith("lnL"):
+                           
+                           lnl_counter += 1
+
+                           if lnl_counter > 1:
+                               
+                               if lnl_counter == 2:
+                                   m1a_lnl = float(line.split(":")[-1].split()[0])
+                                   values.m1a_lnl = m1a_lnl
+
+                               elif lnl_counter == 3:
+                                   m2a_lnl = float(line.split(":")[-1].split()[0])
+                                   values.m2a_lnl = m2a_lnl
+
+                               elif lnl_counter == 4:
+                                   m7_lnl = float(line.split(":")[-1].split()[0])
+                                   values.m7_lnl = m7_lnl
+                               
+                               elif lnl_counter == 5:
+                                   m8_lnl = float(line.split(":")[-1].split()[0])
+                                   values.m8_lnl = m8_lnl              
+                       
+                       if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
+                           
+                           beb_counter += 1
                            next(output_file)
-                           if line.startswith("lnL"):
-                               m1a_lnl = float(line.split(":")[-1].split()[0])
-                               print(m1a_lnl)
-                               values.m1a_lnl = m1a_lnl
+
+                       if line.strip().startswith("The grid"):
+
+                           grid_counter +=1
+                           next(output_file)
+                           
+                       count = 0
+                       sites = []
+                       pp = []
+                       
+                       if beb_counter == 1 and grid_counter < 1:
+                            index = line.split()
+                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
+                                print(", ".join(line.split("\n")))
+                                values.NumberSites1av2a = count
+                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
+            
+                       elif beb_counter == 2 and grid_counter < 2:
+                            index = line.split()
+                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
+                                count += 1
+                                values.NumberSites1av2a = count
+                                values.Sites1av2a = sites.append(index[0])
+                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
+
 
                     output_file.close()                
 
-                    self.dict[values.folder_name] = values
+                    self.dict.update([(values.folder_name, values)])
                 
                     break
             
