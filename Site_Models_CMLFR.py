@@ -59,6 +59,7 @@
 
 import argparse
 from collections import OrderedDict
+import glob
 import os
 from scipy.stats import chi2
 import sys
@@ -67,9 +68,9 @@ cmlfr = argparse.ArgumentParser(description="This Python 3 script allows the use
                                  "with CodeML from the Phylogenetic Analysis by Maximum Likelihood (PAML) package by Z. Yang (1997)," 
                                  "namely by running the site models analyses, on a set of user-defined genes.")
 
-cmlfr.add_argument("--input", "-i", dest="input_gene_list", required=True, nargs="+", help="The main directory containing all the structured gene folders.")
+cmlfr.add_argument("--input", "-i", dest="input_gene_list", required=True, type = str, help="The main directory containing all the structured gene folders.")
 
-cmlfr.add_argument("--output", "-o", dest="output_file", required=True, help="The output .csv file, containing the filtered results.")
+cmlfr.add_argument("--output", "-o", dest="output_file", required=True, type = str, help="The output .csv file, containing the filtered results.")
 
 args = cmlfr.parse_args()
 
@@ -115,157 +116,108 @@ class SiteModelsResults:
         """Extract all the values and information needed from the output files of CodeML's null run."""
     
         ### This will list all the folders that start with "gene_", which is the adopted structure and naming
-        gene_folders = [dir for dir in os.listdir(self.main_directory) if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
-    
+        os.chdir(self.main_directory)
+        gene_folders = glob.glob("gene_*")
+
+        mlc_found = False   ### This flag will be used to check if there is at least one .mlc file inside each run's folder
+
         for folder in gene_folders:
             values = GeneFolders()
             values.folder_name = folder.split("gene_")[1]
             ### This will establish the path to the Null folder inside each gene folder
             output_path = os.path.join(os.getcwd(), folder, "Null")
-            for file in os.listdir(output_path):
+            file_list = os.listdir(output_path)
+            
+            for file in file_list:
                 ### Get the path to the first (and only) .mlc file in the Null folder
                 if file.endswith(".mlc"):
+                    mlc_found = True
+                    gene_length = -1
                     output_file_path = os.path.join(output_path, file)
-                    print("Null: Found .mlc file in", folder)
-                    break
-                else:
-                    print("Error: No .mlc file found in", output_path)
-                    sys.exit(1) ### Abort the script if a .mlc file is missing     
+                    print("Null: Found .mlc file in", folder)    
             
-            ### Now, to open the file and start parsing the information
-            output_file = open(output_file_path, "r")
-            
-            for line in output_file:
-                ### Check if the first line is empty, if not it contains the number of seqs/individuals followed by the gene length 
-                if line.strip().startswith("After deleting gaps."):
-                    ### Extract gene length from the next line after the term
-                    gene_length = next(output_file).strip().split()[1]
-                    values.gene_length = gene_length
-
-                ### If none of the previous terms are present in the file...
-                elif line.strip():
-                    ### Extract gene length from the first line
-                    gene_length = int(line.split()[1])
-                    values.gene_length = gene_length
-            
-                else:
-                    print("Error: Gene length not found in", output_file_path)
-                    sys.exit(1) ### Abort the script if there is a .mlc file without the gene length
+                    ### Now, to open the file and start parsing the information
+                    output_file = open(output_file_path, "r")
                     
-                if line.strip().startswith("lnL"):
-                    m0_lnL = float(line.split(":")[-1].split()[0])
-                    values.m0_lnl = m0_lnL
-                else:
-                    print("Error: Null lnL not found in", output_file_path)
-                    sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
-                
-                if line.strip().startswith("omega (dN/dS)"):
-                    omega = float(line.split("=")[1].strip())
-                    values.omega = omega
-                else:
-                    print("Error: Omega not found in", output_file_path)
-                    sys.exit(1) ### Abort the script if there is a .mlc file without omega (dN/dS)
-                                    
-            output_file.close()
+                    for line in output_file:
+                        ### Check if the first line is empty, if not it contains the number of seqs/individuals followed by the gene length 
+                        if gene_length == -1:
+                            ### Extract gene length from the first line
+                            split = line.split(" ")
+                            gene_length = split[-1].split("\n")[0]
+                            print(gene_length)
+                            values.gene_length = gene_length
+                        
+                        ### If gaps/ambiguous sites are not preserved...
+                        if line.strip().startswith("After deleting gaps."):
+                            ### Extract gene length from the next line after the term
+                            gene_length = next(output_file).strip().split()[1]
+                            print(gene_length)
+                            values.gene_length = gene_length
+                            
+                        if line.strip().startswith("lnL"):
+                            m0_lnL = float(line.split(":")[-1].split()[0])
+                            print(m0_lnL)
+                            values.m0_lnl = m0_lnL
+                        
+                        if line.strip().startswith("omega (dN/dS)"):
+                            omega = float(line.split("=")[1].strip())
+                            print(omega)
+                            values.omega = omega
 
-            self.dict[values.folder_name] = values      
-    
+                    output_file.close()
+
+                    self.dict[values.folder_name] = values      
+                
+                    break   
+            
+            if not mlc_found:
+                print("Error: No .mlc file found in", folder)
+                sys.exit(1) ### Abort the script if there is a missing .mlc file
+
     def extract_alternative_values(self):
         """Extract all the values and information needed from the output files of CodeML's alternative run."""
     
         ### This will list all the folders that start with "gene_", which is the adopted structure and naming
-        gene_folders = [dir for dir in os.listdir(self.main_directory) if os.path.isdir(os.path.join(os.getcwd(), dir)) and dir.startswith("gene_")]
+        os.chdir(self.main_directory)
+        gene_folders = glob.glob("gene_*")
         
+        mlc_found = False   ### This flag will be used to check if there is at least one .mlc file inside each run's folder
+
         for folder in gene_folders:
             values = self.dict[folder.split("gene_")[1]]
             ### This will establish the path to the Alternative folder inside each gene folder
             output_path = os.path.join(os.getcwd(), folder, "Alternative")
-            for file in os.listdir(output_path):
+            file_list = os.listdir(output_path)
+            
+            for file in file_list:
                 ### Get the path to the first (and only) .mlc file in the Alternative folder
                 if file.endswith(".mlc"):
-                    output_file_path = os.path.join(output_path, output_file_path)
-                    print("Alternative: Found .mlc file in", folder)
+                    mlc_found = True
+                    output_file_path = os.path.join(output_path, file)
+                    print("Alternative: Found .mlc file in", folder)    
+
+                    ### Now, to open the file and start parsing the information
+                    output_file = open(output_file_path, 'r')
+                        
+                    for line in output_file:
+                       ### Get the first lnL, for M1a
+                       if line.startswith("NSsites Model 1: NearlyNeutral"):
+                           next(output_file)
+                           if line.startswith("lnL"):
+                               m1a_lnl = float(line.split(":")[-1].split()[0])
+                               print(m1a_lnl)
+                               values.m1a_lnl = m1a_lnl
+
+                    output_file.close()                
+
+                    self.dict[values.folder_name] = values
+                
                     break
-                else:
-                    print("Error: No .mlc file found in", output_path)
-                    sys.exit(1) ### Abort the script if a .mlc file is missing     
-
-            ### Now, to open the file and start parsing the information
-            output_file = open(output_file_path, 'r')
-                
-            for line in output_file:
-                ### Counter to find the correct lnL values
-                lnl_counter = 0
-                    
-                if line.strip().startswith("lnL"):
-                    ### First lnL is for the null model
-                    lnl_counter += 1
-                        
-                    if lnl_counter == 2: 
-                        ### Second occurrence is for the M1a model
-                        m1a_lnl = float(line.split(":")[-1].split()[0])
-                        values.m1a_lnl = m1a_lnl
-                        
-                    if lnl_counter == 3:
-                        ### Third occurrence is for the M2a model
-                        m2a_lnl = float(line.split(":")[-1].split()[0])
-                        values.m2a_lnl = m2a_lnl
-
-                        ### Initialise count variable to store site count, sites variable to store site list and pp variable to store posterior probability list
-                        count = 0
-                        sites = []
-                        pp = []
-
-                        if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
-                            next(output_file)
-                            extract = True
-                            continue
-                        elif line.strip().startswith("The grid"):
-                            break
-                        if extract:
-                            index = line.split()
-                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
-                                count += 1
-                                values.NumberSites1av2a = count
-                                values.Sites1av2a = sites.append(index[0])
-                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
-                                   
-                    if lnl_counter == 4:
-                        ### Fourth occurrence is for the M7 model
-                        m7_lnl = float(line.split(":")[-1].split()[0])
-                        values.m7_lnl = m7_lnl
-                        
-                    if lnl_counter == 5:
-                        ### Fifth occurrence is for the M8 model
-                        m8_lnl = float(line.split(":")[-1].split()[0])
-                        values.m8_lnl = m8_lnl
-
-                       ### Initialise count variable to store site count, sites variable to store site list and pp variable to store posterior probability list
-                        count = 0
-                        sites = []
-                        pp = []
-
-                        if line.strip().startswith("Bayes Empirical Bayes (BEB) analysis"):
-                            next(output_file)
-                            extract = True
-                            continue
-                        elif line.strip().startswith("The grid"):
-                            break
-                        if extract:
-                            index = line.split()
-                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
-                                count += 1
-                                values.NumberSites7v8 = count
-                                values.Sites7v8 = sites.append(index[0])
-                                values.PPSites7v8 = pp.append(float(index[2].replace("*", "")))
-                
-                else:
-                    print("Error: Null lnL not found in", output_file_path)
-                    sys.exit(1) ### Abort the script if there is a .mlc file without the lnL
-                
-            output_file.close()                
-
-            self.dict[values.folder_name] = values
+            
+            if not mlc_found:
+                print("Error: No .mlc file found in", folder)
+                sys.exit(1) ### Abort the script if there is a missing .mlc file    
 
     def likelihood_ratio_test(self, df, null_lnl, alt_lnl):
         """Perform a likelihood ratio test (LRT) with the lnL values for the Null and Alternative models, and then calculate the p-value using a Chi-squared test."""
@@ -308,9 +260,9 @@ class SiteModelsResults:
                             "Sites;PP;M7 lnL;M8 lnL;df;LRT (7 vs 8);pvalue;Number of Sites under PS;Sites;PP\n")
         
         for gene in self.dict.values():
-            print("Processing results for {}...".format(gene))
+            print("Processing results for {}...".format(gene.folder_name))
 
-            save_to_output.write("{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n".format(
+            save_to_output.write("{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{};{}\n".format(
                                                 gene.folder_name,                      
                                                 gene.gene_length,                      
                                                 gene.omega,                                  
@@ -319,6 +271,7 @@ class SiteModelsResults:
                                                 gene.df0v1a,                                
                                                 gene.lrt0v1a,                              
                                                 gene.pvalue0v1a,                        
+                                                gene.m1a_lnl,
                                                 gene.m2a_lnl,                              
                                                 gene.df1av2a,                              
                                                 gene.lrt1av2a,                            
