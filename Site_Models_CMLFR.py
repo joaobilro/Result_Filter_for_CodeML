@@ -4,6 +4,8 @@
 #
 # Site_Models_CMLFR.py
 #
+# Version 1.0
+#
 # This Python 3 script allows the user to filter the results in the output files created 
 # with CodeML from the Phylogenetic Analysis by Maximum Likelihood (PAML) package by Z. Yang (1997), 
 # namely by running the site models analyses, on a set of user-defined genes.
@@ -199,6 +201,10 @@ class SiteModelsResults:
                     lnl_counter = 0
                     beb_counter = 0
                     grid_counter = 0
+                    sites_1a2a = []
+                    pp_1a2a = []
+                    sites_78 = []
+                    pp_78 = []
 
                     for line in output_file:
                        if line.strip().startswith("lnL"):
@@ -232,25 +238,25 @@ class SiteModelsResults:
 
                            grid_counter +=1
                            next(output_file)
-                           
-                       count = 0
-                       sites = []
-                       pp = []
                        
                        if beb_counter == 1 and grid_counter < 1:
                             index = line.split()
-                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
-                                print(", ".join(line.split("\n")))
-                                values.NumberSites1av2a = count
-                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
-            
+                            if len(index) >= 3 and "*" in index[2]:
+                                sites_1a2a.append(int(index[0]))
+                                values.Sites1av2a = ", ".join(map(str, sites_1a2a))
+                                values.NumberSites1av2a = len(sites_1a2a)
+                                pp_1a2a.append(float(index[2].replace("*", "")))
+                                values.PPSites1av2a = ", ".join(map(str, pp_1a2a))
+
+                       
                        elif beb_counter == 2 and grid_counter < 2:
                             index = line.split()
-                            if len(index) >= 3 and ("*" in index[2] or "**" in index[2]):
-                                count += 1
-                                values.NumberSites1av2a = count
-                                values.Sites1av2a = sites.append(index[0])
-                                values.PPSites1av2a = pp.append(float(index[2].replace("*", "")))
+                            if len(index) >= 3 and "*" in index[2]:
+                                sites_78.append(int(index[0]))
+                                values.Sites7v8 = ", ".join(map(str, sites_78))
+                                values.NumberSites7v8 = len(sites_78)
+                                pp_78.append(float(index[2].replace("*", "")))
+                                values.PPSites7v8 = ", ".join(map(str, pp_78))
 
 
                     output_file.close()                
